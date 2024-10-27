@@ -37,13 +37,9 @@ async def start(message: types.Message):
                          f"2. Заключить новый договор")
 
 @dp.message(F.text == "1")
-async def start(message: types.Message):
-    await message.answer(f"Введите номер договора: 516хххххх:")
-
-@dp.message(F.text == "да")
-async def apruv(message: types.Message):
-    if search(message.text.lower()):
-        await message.answer(f"Хорошо иду в профиль")
+async def client_login(message: types.Message):
+    await message.answer(f"Введите номер договора (516хххххх):")
+    await message.answer("Обратите внимание, номер договора должен быть в формате 516хххххх.")
 
 @dp.message(F.text == "2")
 async def start_form(message: types.Message, state: FSMContext):
@@ -92,6 +88,26 @@ async def process_email(message: types.Message, state: FSMContext):
 
     await state.clear()
 
+# Изменить этот хэндлер, добавив проверку состояния
+@dp.message()
+async def process_message(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    
+    # Если состояние не установлено (не в процессе заполнения формы)
+    if current_state is None:
+        # Проверяем формат договора
+        if re.match(r"^516\d{6}$", message.text):
+            Session = sessionmaker(bind=engine)
+            session = Session()
+            customer = session.query(Customer).filter(Customer.num_dog == message.text).first()
+            if customer:
+                await message.answer(f"Договор найден. ФИО: {customer.fio}")
+            else:
+                await message.answer("Договор не найден.")
+            session.close()
+        else:
+            await message.answer("Неправильный формат номера договора. Правильный формат: 516хххххх.")
+
 # Хэндлер на получение голосового и аудио сообщения
 @dp.message(lambda message: message.content_type in [types.ContentType.VOICE, types.ContentType.AUDIO,
                                                      types.ContentType.DOCUMENT])
@@ -126,6 +142,13 @@ async def handle_audio_files(message: types.Message):
             await message.answer("Не удалось распознать текст")
             os.remove(file_on_disk)
             return
+
+        if "войти" in text.lower() or "клиент" in text.lower():
+            await client_login(message, text)
+        else:
+            # Подбор ответов по пойманным словам
+            answer = search(text.lower())
+            await message.answer(answer)
 
         os.remove(file_on_disk)
         # Подбор ответов по пойманным словам
