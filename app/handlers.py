@@ -134,3 +134,7 @@ async def handle_audio_files(message: types.Message):
 
     except Exception as e:
         await message.answer(f"Произошла ошибка: {str(e)}")
+
+if __name__ == "__main__":
+    from aiogram import executor
+    executor.start_polling(dp, skip_updates=True)
