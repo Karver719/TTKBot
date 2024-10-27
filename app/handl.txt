@@ -1,0 +1,95 @@
+import os
+from pathlib import Path
+from aiogram.filters import Command
+from aiogram import types, Dispatcher, Bot
+from tts import TTS
+from stt import STT
+from dotenv import load_dotenv
+import json
+
+load_dotenv()
+TELEGRAM_TOKEN = os.getenv('BOT_TOKEN')
+
+bot = Bot(token=TELEGRAM_TOKEN)  # Объект бота
+dp = Dispatcher()  # Диспетчер для бота
+stt = STT()
+tts = TTS()
+
+with open('lemmas.json', 'r', encoding='utf-8') as f:
+    lemmas = json.load(f)
+
+# Хэндлер на команду /start , /help
+@dp.message(Command("start"))
+@dp.message(Command("help"))
+async def cmd_start(message: types.Message):
+    await message.reply(
+        "Привет! Это Бот для конвертации голосового/аудио сообщения в текст"
+        " и создания аудио из текста."
+    )
+
+# Хэндлер на команду /test
+@dp.message(Command("test"))
+async def cmd_test(message: types.Message):
+    """
+    Обработчик команды /test
+    """
+    await message.answer("Test")
+
+# Хэндлер на получение голосового и аудио сообщения
+@dp.message(lambda message: message.content_type in [types.ContentType.VOICE, types.ContentType.AUDIO,
+                                                     types.ContentType.DOCUMENT])
+async def handle_audio_files(message: types.Message):
+    """
+    Обработчик на получение голосового и аудио сообщения.
+    """
+    if message.content_type == types.ContentType.VOICE:
+        file_id = message.voice.file_id
+    elif message.content_type == types.ContentType.AUDIO:
+        file_id = message.audio.file_id
+    elif message.content_type == types.ContentType.DOCUMENT:
+        file_id = message.document.file_id
+    else:
+        await message.reply("Формат документа не поддерживается")
+        return
+
+    file = await bot.get_file(file_id)
+    file_path = file.file_path
+    file_on_disk = Path(f"{file_id}.tmp")
+    await bot.download_file(file_path, destination=file_on_disk)
+    await message.reply("Аудио получено")
+
+    text = stt.audio_to_text(file_on_disk)
+    if not text:
+        text = "Формат документа не поддерживается"
+        await message.answer(text)
+        return
+
+    # Проверка на наличие слова "Привет" в распознанном тексте
+    text = text.lower()
+    for word in text.split():
+        for category, lemma_list in lemmas.items():
+            if word in lemma_list:
+                if category == 'greetings':
+                    await message.answer("Приветствую")
+                    return
+                elif category == "farewells":
+                    await message.answer("Прощай")
+                    return
+
+    await message.answer(text)
+
+# Хэндлер на получение текстового сообщения "Привет"
+@dp.message(lambda message: message.text)
+async def handle_text_privet(message: types.Message):
+    text = message.text.lower()
+    for word in text.split():
+        for category, lemma_list in lemmas.items():
+            if word in lemma_list:
+                if category == 'greetings':
+                    await message.answer("Приветствую")
+                    return
+                elif category == "farewells":
+                    await message.answer("Прощай")
+                    return
+
+    await message.answer(text)
